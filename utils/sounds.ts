@@ -17,6 +17,10 @@ let initPromise: Promise<void> | null = null;
 
 const decodedBuffers: Partial<Record<WordName, AudioBuffer>> = {};
 
+function getContextState(ctx: AudioContext): AudioContextState {
+    return ctx.state;
+}
+
 function getAudioContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
 
@@ -72,7 +76,7 @@ async function decodeWordBuffer(ctx: AudioContext, word: WordName): Promise<void
 }
 
 async function tryResumeContext(ctx: AudioContext): Promise<boolean> {
-    if (ctx.state === "running") return true;
+    if (getContextState(ctx) === "running") return true;
 
     try {
         await ctx.resume();
@@ -84,7 +88,8 @@ async function tryResumeContext(ctx: AudioContext): Promise<boolean> {
         return false;
     }
 
-    if (ctx.state !== "running") {
+    const resumedState = getContextState(ctx);
+    if (resumedState !== "running") {
         console.warn(
             "[WhisperBoard] AudioContext is not running yet. A user gesture may be required before playback."
         );
