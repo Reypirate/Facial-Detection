@@ -5,7 +5,19 @@ import { drawLabeledBox, drawHandSkeleton, getHandBoundingBox, COLORS } from "@/
 import { playGestureSound } from "@/utils/sounds";
 import { checkGestureAction } from "@/utils/gestureActions";
 
-// Face Matching helper
+// ─── Liveness Detection (EAR) Helper ────────────────────────────────────
+function calculateEAR(eyeLandmarks: any[]) {
+    // eyeLandmarks is an array of 6 points. 
+    // vertical distances:
+    const v1 = Math.hypot(eyeLandmarks[1].x - eyeLandmarks[5].x, eyeLandmarks[1].y - eyeLandmarks[5].y);
+    const v2 = Math.hypot(eyeLandmarks[2].x - eyeLandmarks[4].x, eyeLandmarks[2].y - eyeLandmarks[4].y);
+    // horizontal distance:
+    const h = Math.hypot(eyeLandmarks[0].x - eyeLandmarks[3].x, eyeLandmarks[0].y - eyeLandmarks[3].y);
+    
+    return (v1 + v2) / (2.0 * h);
+}
+
+// ─── Face Matching helper ───────────────────────────────────────────────
 function matchFace(descriptor: Float32Array, saved: SavedFace[]): string | null {
     if (saved.length === 0) return null;
     let bestMatch: string | null = null;
@@ -58,7 +70,14 @@ export function useDetection({
     const [emotionHistory, setEmotionHistory] = useState<
         { time: number; emotion: string; score: number }[]
     >([]);
+    
+    // Advanced Tracking States
+    const [hasBlinked, setHasBlinked] = useState(false);
+    const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+    const [isPinching, setIsPinching] = useState(false);
 
+    const livenessRef = useRef(false);
+    const pinchCooldownRef = useRef(0);
     const lastDescriptorRef = useRef<Float32Array | null>(null);
     const frameCountRef = useRef(0);
     const lastFpsTime = useRef(Date.now());
@@ -138,11 +157,31 @@ export function useDetection({
 
             if (resized.length === 0) {
                 lastDescriptorRef.current = null;
+                if (livenessRef.current) {
+                    livenessRef.current = false;
+                    setHasBlinked(false);
+                }
             }
 
             resized.forEach((det: any) => {
                 const box = det.detection.box;
                 const conf = Math.round(det.detection.score * 100);
+
+                // Check Blink
+                const landmarks = det.landmarks;
+                if (landmarks && !livenessRef.current) {
+                    const leftEye = landmarks.getLeftEye();
+                    const rightEye = landmarks.getRightEye();
+                    const leftEAR = calculateEAR(leftEye);
+                    const rightEAR = calculateEAR(rightEye);
+                    const avgEAR = (leftEAR + rightEAR) / 2.0;
+
+                    // Standard EAR threshold for a blink is around 0.2
+                    if (avgEAR < 0.2) {
+                        livenessRef.current = true;
+                        setHasBlinked(true);
+                    }
+                }
 
                 let label = `HUMAN ${conf}%`;
                 if (det.descriptor) {
@@ -205,9 +244,67 @@ export function useDetection({
                 }
 
                 checkGestureAction(gesture);
+
+                // ─── Virtual Cursor & Pinch Click ───
+                // Only process cursor for the first hand detected
+                if (idx === 0) {
+                    const indexTip = landmarks[8];
+                    const thumbTip = landmarks[4];
+                    
+                    const pX = indexTip.x * w;
+                    const pY = indexTip.y * h;
+                    setCursorPos({ x: pX, y: pY });
+
+                    // Draw glowing cursor dot
+                    ctx.beginPath();
+                    ctx.arc(pX, pY, 8, 0, 2 * Math.PI);
+                    ctx.fillStyle = "#00ff88";
+                    ctx.shadowColor = "#00ff88";
+                    ctx.shadowBlur = 15;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    const pinchDist = Math.hypot(pX - thumbTip.x * w, pY - thumbTip.y * h);
+                    
+                    if (pinchDist < 30) {
+                        setIsPinching(true);
+                        // Draw pinch indicator
+                        ctx.beginPath();
+                        ctx.arc(pX, pY, 15, 0, 2 * Math.PI);
+                        ctx.strokeStyle = "#ff00ff";
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+
+                        if (now - pinchCooldownRef.current > 1000) {
+                            pinchCooldownRef.current = now;
+                            
+                            // Map canvas coordinates to screen for synthetic click
+                            const canvasRect = canvas.getBoundingClientRect();
+                            // Because video is horizontally flipped in CSS via scaleX(-1), 
+                            // we must invert the X coordinate relative to the canvas width.
+                            const flippedX = w - pX; 
+                            const scaleX = canvasRect.width / w;
+                            const scaleY = canvasRect.height / h;
+                            
+                            const screenX = canvasRect.left + (flippedX * scaleX);
+                            const screenY = canvasRect.top + (pY * scaleY);
+                            
+                            // Trigger synthetic DOM click
+                            const element = document.elementFromPoint(screenX, screenY);
+                            if (element && element instanceof HTMLElement) {
+                                element.click();
+                                playGestureSound("PINCH_CLICK"); // Optional audio feedback
+                            }
+                        }
+                    } else {
+                        setIsPinching(false);
+                    }
+                }
             });
         } else {
             setHandCount(0);
+            setCursorPos(null);
+            setIsPinching(false);
         }
 
         // 5. Draw Objects
@@ -255,6 +352,9 @@ export function useDetection({
         topExpression,
         topGesture,
         emotionHistory,
-        lastDescriptorRef
+        lastDescriptorRef,
+        hasBlinked,
+        cursorPos,
+        isPinching
     };
 }

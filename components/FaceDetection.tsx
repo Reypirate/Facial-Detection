@@ -4,12 +4,14 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import Script from "next/script";
 import { registerGestureAction } from "@/utils/gestureActions";
 import { toggleSounds } from "@/utils/sounds";
+import { cn } from "@/utils/cn";
 import Dashboard from "./Dashboard";
 import Photobooth from "./Photobooth";
 import { useCamera } from "@/hooks/useCamera";
 import { useAIModels } from "@/hooks/useAIModels";
 import { useDetection } from "@/hooks/useDetection";
 import { SavedFace } from "@/types/models";
+import RegisterTab from "./RegisterTab";
 
 // ─── Face Registration store ────────────────────────────────────────────
 function loadSavedFaces(): SavedFace[] {
@@ -40,7 +42,9 @@ function saveFaceToDB(name: string, descriptor: Float32Array) {
 type TabId = "detection" | "photobooth" | "register";
 
 export default function FaceDetection() {
+    // 1. Core Detection Canvas
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
     const [activeTab, setActiveTab] = useState<TabId>("detection");
     const [detectionPaused, setDetectionPaused] = useState(false);
     const [soundEnabled, setSoundEnabled] = useState(true);
@@ -75,7 +79,10 @@ export default function FaceDetection() {
         topExpression,
         topGesture,
         emotionHistory,
-        lastDescriptorRef
+        lastDescriptorRef,
+        hasBlinked,
+        cursorPos,
+        isPinching
     } = useDetection({
         videoRef,
         canvasRef,
@@ -89,7 +96,7 @@ export default function FaceDetection() {
         savedFaces
     });
 
-    const isRegistrationReady = lastDescriptorRef.current !== null && registerName.trim().length > 0;
+    const isRegistrationReady = lastDescriptorRef.current !== null && registerName.trim().length > 0 && hasBlinked;
 
     // Register global gesture actions manually
     useEffect(() => {
@@ -148,7 +155,11 @@ export default function FaceDetection() {
 
     if (cameraError) {
         return (
-            <div className="flex flex-col items-center justify-center w-full max-w-[800px] aspect-[4/3] bg-zinc-900/80 backdrop-blur-xl rounded-2xl border border-red-500/30 text-center p-6 shadow-[0_0_50px_rgba(239,68,68,0.1)]">
+            <div className={cn(
+                "flex flex-col items-center justify-center w-full max-w-[800px] aspect-[4/3]",
+                "bg-zinc-900/80 backdrop-blur-xl rounded-2xl border border-red-500/30 text-center",
+                "p-6 shadow-[0_0_50px_rgba(239,68,68,0.1)]"
+            )}>
                 <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
                     <p className="text-4xl animate-bounce">📷</p>
                 </div>
@@ -158,7 +169,10 @@ export default function FaceDetection() {
                 </p>
                 <button
                     onClick={retryCamera}
-                    className="px-8 py-3 bg-red-500/10 text-red-400 border border-red-500/50 hover:bg-red-500/20 rounded-xl transition-all font-mono text-sm uppercase tracking-widest font-bold"
+                    className={cn(
+                        "px-8 py-3 bg-red-500/10 text-red-400 border border-red-500/50 rounded-xl",
+                        "hover:bg-red-500/20 transition-all font-mono text-sm uppercase tracking-widest font-bold"
+                    )}
                 >
                     Retry Connection
                 </button>
@@ -214,9 +228,13 @@ export default function FaceDetection() {
             <Script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" strategy="lazyOnload" crossOrigin="anonymous" onLoad={onHandsLoad} />
 
             {/* Main Stage */}
-            <div className={`relative w-full max-w-[800px] aspect-[4/3] rounded-2xl overflow-hidden border shadow-2xl transition-all duration-500 bg-black ${videoBorderClass}`}>
+            <div className={cn(
+                "relative w-full max-w-[800px] aspect-[4/3] rounded-2xl overflow-hidden",
+                "border shadow-2xl transition-all duration-500 bg-black",
+                videoBorderClass
+            )}>
                 
-                {/* Video Feed */}
+                {/* Raw Video Feed */}
                 <video
                     ref={videoRef}
                     muted
@@ -224,6 +242,8 @@ export default function FaceDetection() {
                     className="absolute inset-0 w-full h-full object-cover"
                     style={{ transform: "scaleX(-1)" }}
                 />
+
+                {/* Layer 2: Detection Bounding Boxes and Logic */}
                 <canvas
                     ref={canvasRef}
                     className="absolute inset-0 w-full h-full object-cover pointer-events-none"
@@ -238,11 +258,12 @@ export default function FaceDetection() {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`px-4 py-2 rounded-lg text-xs font-mono transition-all font-bold ${
+                                className={cn(
+                                    "px-4 py-2 rounded-lg text-xs font-mono transition-all font-bold",
                                     activeTab === tab.id
                                         ? "bg-emerald-500/20 text-emerald-400 shadow-[inset_0_0_10px_rgba(16,185,129,0.2)]"
                                         : "text-zinc-500 hover:text-zinc-300"
-                                }`}
+                                )}
                             >
                                 {tab.emoji} <span className="hidden sm:inline-block ml-1">{tab.label}</span>
                             </button>
@@ -258,7 +279,10 @@ export default function FaceDetection() {
                 {/* Center Loading State */}
                 {areAllModelsLoading && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/60 backdrop-blur-sm pointer-events-none">
-                        <div className="w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(16,185,129,0.2)]" />
+                        <div className={cn(
+                            "w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-500",
+                            "rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                        )} />
                     </div>
                 )}
 
@@ -275,9 +299,11 @@ export default function FaceDetection() {
                 )}
             </div>
 
-            {/* Bottom Controls Area (Moved outside camera view) */}
             <div className="w-full max-w-[800px] mt-4 flex flex-col items-center justify-end z-30">
-                <div className="w-full overflow-y-auto no-scrollbar rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 shadow-lg transition-all p-5">
+                <div className={cn(
+                    "w-full overflow-y-auto no-scrollbar rounded-2xl bg-black/40",
+                    "backdrop-blur-xl border border-white/10 shadow-lg transition-all p-5"
+                )}>
                     
                     {activeTab === "detection" && (
                             <Dashboard
@@ -299,67 +325,16 @@ export default function FaceDetection() {
                         )}
 
                         {activeTab === "register" && (
-                            <div className="space-y-4">
-                                <div>
-                                    <p className="text-zinc-500 text-[10px] font-mono uppercase mb-1 tracking-widest font-bold">
-                                        Identity Registration
-                                    </p>
-                                    <p className="text-zinc-400 text-xs mb-4 leading-relaxed">
-                                        Face the camera center. The frame pulses <span className="text-emerald-400 font-bold">green</span> when your face is locked on. Enter an alias to train the local recognition net.
-                                    </p>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={registerName}
-                                            onChange={(e) => setRegisterName(e.target.value)}
-                                            placeholder="Enter classification alias..."
-                                            className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500/50 focus:bg-white/5 transition-all outline-none placeholder:text-zinc-600"
-                                        />
-                                        <button
-                                            onClick={handleRegisterFace}
-                                            disabled={!isRegistrationReady}
-                                            className={`px-6 py-2.5 font-bold font-mono rounded-xl text-sm transition-all tracking-wide ${
-                                                isRegistrationReady 
-                                                    ? "bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:bg-emerald-400" 
-                                                    : "bg-white/5 text-zinc-600 cursor-not-allowed border border-white/5"
-                                            }`}
-                                        >
-                                            ENROLL
-                                        </button>
-                                    </div>
-                                    {registerStatus && (
-                                        <p className="mt-3 text-xs font-mono text-emerald-400 flex items-center gap-2">
-                                            {registerStatus}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {savedFaces.length > 0 && (
-                                    <div className="pt-4 border-t border-white/10">
-                                        <p className="text-zinc-500 text-[10px] font-mono uppercase mb-3 tracking-widest font-bold">
-                                            Active Profiles Database ({savedFaces.length})
-                                        </p>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {savedFaces.map((f, i) => (
-                                                <div
-                                                    key={i}
-                                                    className="flex items-center justify-between bg-white/5 border border-white/5 rounded-xl px-3 py-2"
-                                                >
-                                                    <span className="text-zinc-300 font-mono text-xs font-bold truncate pr-3">
-                                                        {f.name}
-                                                    </span>
-                                                    <button
-                                                        onClick={() => handleDeleteFace(f.name)}
-                                                        className="text-red-400/70 hover:text-red-400 text-[10px] uppercase font-mono tracking-widest shrink-0"
-                                                    >
-                                                        Purge
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            <RegisterTab
+                                registerName={registerName}
+                                setRegisterName={setRegisterName}
+                                registerStatus={registerStatus}
+                                savedFaces={savedFaces}
+                                hasBlinked={hasBlinked}
+                                isRegistrationReady={isRegistrationReady}
+                                onRegister={handleRegisterFace}
+                                onDeleteFace={handleDeleteFace}
+                            />
                         )}
                     </div>
                 </div>
