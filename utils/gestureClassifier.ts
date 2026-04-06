@@ -1,13 +1,21 @@
-// ─── Gesture classifier from hand landmarks ────────────────────────────
+// ─── Per-finger state detector for Soundboard ──────────────────────────
 
-export function classifyGesture(landmarks: any[]): string {
-    const wrist = landmarks[0];
-    const thumbTip = landmarks[4];
-    const thumbIp = landmarks[3];
-    const thumbMcp = landmarks[2];
+import { FingerStates } from "@/types/models";
+
+/**
+ * Returns the state of 4 trackable fingers (Index, Middle, Ring, Pinky).
+ * A finger is "down" (tapped) when its tip landmark y > its PIP (middle joint) y.
+ * Coordinates are in normalized [0,1] space from MediaPipe.
+ */
+export function getFingerStates(landmarks: any[]): FingerStates {
+    // MediaPipe Hand landmark indices:
+    //   Index  → tip: 8,  PIP: 6
+    //   Middle → tip: 12, PIP: 10
+    //   Ring   → tip: 16, PIP: 14
+    //   Pinky  → tip: 20, PIP: 18
+
     const indexTip = landmarks[8];
     const indexPip = landmarks[6];
-    const indexMcp = landmarks[5];
     const middleTip = landmarks[12];
     const middlePip = landmarks[10];
     const ringTip = landmarks[16];
@@ -15,28 +23,26 @@ export function classifyGesture(landmarks: any[]): string {
     const pinkyTip = landmarks[20];
     const pinkyPip = landmarks[18];
 
-    const indexUp = indexTip.y < indexPip.y;
-    const middleUp = middleTip.y < middlePip.y;
-    const ringUp = ringTip.y < ringPip.y;
-    const pinkyUp = pinkyTip.y < pinkyPip.y;
-
-    const thumbOut = Math.abs(thumbTip.x - indexMcp.x) > 0.06;
-    const thumbUp = thumbTip.y < thumbIp.y && thumbTip.y < thumbMcp.y;
-
-    if (thumbUp && !indexUp && !middleUp && !ringUp && !pinkyUp) return "THUMBS UP 👍";
-    if (thumbTip.y > wrist.y && !indexUp && !middleUp && !ringUp && !pinkyUp) return "THUMBS DOWN 👎";
-    if (indexUp && middleUp && !ringUp && !pinkyUp) return "PEACE ✌️";
-    if (indexUp && !middleUp && !ringUp && pinkyUp) return "ROCK ON 🤘";
-
-    const thumbIndexDist = Math.sqrt(
-        Math.pow(thumbTip.x - indexTip.x, 2) + Math.pow(thumbTip.y - indexTip.y, 2)
-    );
-    if (thumbIndexDist < 0.05 && middleUp && ringUp && pinkyUp) return "OK 👌";
-    if (indexUp && !middleUp && !ringUp && !pinkyUp) return "POINTING ☝️";
-    if (indexUp && middleUp && ringUp && pinkyUp && thumbOut) return "OPEN PALM 🖐️";
-    if (!indexUp && !middleUp && !ringUp && !pinkyUp && !thumbOut) return "FIST ✊";
-    if (indexUp && middleUp && ringUp && !pinkyUp) return "THREE 🤟";
-    if (thumbOut && pinkyUp && !indexUp && !middleUp && !ringUp) return "CALL ME 🤙";
-
-    return "HAND DETECTED";
+    return {
+        index: {
+            isDown: indexTip.y > indexPip.y,
+            tipX: indexTip.x,
+            tipY: indexTip.y,
+        },
+        middle: {
+            isDown: middleTip.y > middlePip.y,
+            tipX: middleTip.x,
+            tipY: middleTip.y,
+        },
+        ring: {
+            isDown: ringTip.y > ringPip.y,
+            tipX: ringTip.x,
+            tipY: ringTip.y,
+        },
+        pinky: {
+            isDown: pinkyTip.y > pinkyPip.y,
+            tipX: pinkyTip.x,
+            tipY: pinkyTip.y,
+        },
+    };
 }

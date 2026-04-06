@@ -1,19 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { SavedFace, HandResult, CocoPrediction } from "../types/models";
-import { classifyGesture } from "@/utils/gestureClassifier";
+import { SavedFace, HandResult, FingerName, FingerStates, FINGER_CONFIG } from "../types/models";
+import { getFingerStates } from "@/utils/gestureClassifier";
 import { drawLabeledBox, drawHandSkeleton, getHandBoundingBox, COLORS } from "@/utils/drawingHelpers";
-import { playGestureSound } from "@/utils/sounds";
-import { checkGestureAction } from "@/utils/gestureActions";
+import { playSample, initSoundboard } from "@/utils/sounds";
 
 // ─── Liveness Detection (EAR) Helper ────────────────────────────────────
 function calculateEAR(eyeLandmarks: any[]) {
-    // eyeLandmarks is an array of 6 points. 
-    // vertical distances:
     const v1 = Math.hypot(eyeLandmarks[1].x - eyeLandmarks[5].x, eyeLandmarks[1].y - eyeLandmarks[5].y);
     const v2 = Math.hypot(eyeLandmarks[2].x - eyeLandmarks[4].x, eyeLandmarks[2].y - eyeLandmarks[4].y);
-    // horizontal distance:
     const h = Math.hypot(eyeLandmarks[0].x - eyeLandmarks[3].x, eyeLandmarks[0].y - eyeLandmarks[3].y);
-    
     return (v1 + v2) / (2.0 * h);
 }
 
@@ -21,7 +16,7 @@ function calculateEAR(eyeLandmarks: any[]) {
 function matchFace(descriptor: Float32Array, saved: SavedFace[]): string | null {
     if (saved.length === 0) return null;
     let bestMatch: string | null = null;
-    let bestDist = 0.6; // threshold
+    let bestDist = 0.6;
     for (const face of saved) {
         let sum = 0;
         for (let i = 0; i < descriptor.length; i++) {
@@ -34,6 +29,46 @@ function matchFace(descriptor: Float32Array, saved: SavedFace[]): string | null 
         }
     }
     return bestMatch;
+}
+
+// ─── Draw floating glowing text above a finger tip ──────────────────────
+function drawFingerLabel(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    label: string,
+    color: string
+) {
+    const textY = y - 30; // Float above the fingertip
+
+    ctx.save();
+
+    // Outer glow
+    ctx.font = "bold 28px 'Inter', monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 25;
+    ctx.fillStyle = color;
+    ctx.fillText(label, x, textY);
+
+    // Inner brighter pass for intensity
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = 0.8;
+    ctx.fillText(label, x, textY);
+
+    // Pulsing ring around fingertip
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.arc(x, y, 14, 0, 2 * Math.PI);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 20;
+    ctx.stroke();
+
+    ctx.restore();
 }
 
 interface DetectionProps {
@@ -81,11 +116,21 @@ export function useDetection({
     const lastDescriptorRef = useRef<Float32Array | null>(null);
     const frameCountRef = useRef(0);
     const lastFpsTime = useRef(Date.now());
-    const lastGestureSound = useRef<string>("");
-    const lastGestureSoundTime = useRef(0);
     const requestRef = useRef<number | null>(null);
 
-    // This loop effectively replaces the setInterval loop mapping predictions to UI and canvas
+    // ─── Soundboard: previous finger state for edge detection ───────────
+    const prevFingerDownRef = useRef<Record<FingerName, boolean>>({
+        index: false,
+        middle: false,
+        ring: false,
+        pinky: false,
+    });
+
+    // Initialize soundboard audio buffers on mount
+    useEffect(() => {
+        initSoundboard();
+    }, []);
+
     const detectionLoop = useCallback(async () => {
         if (!cameraReady || detectionPaused) {
             requestRef.current = requestAnimationFrame(detectionLoop);
@@ -152,8 +197,6 @@ export function useDetection({
             const fa = (window as any).faceapi;
             const resized = fa.resizeResults(faceDets, { width: w, height: h });
             setFaceCount(resized.length);
-            // DEBUG LOG HERE
-            if (frameCountRef.current % 30 === 0) console.log("Faces detected:", resized.length, "Raw dets:", faceDets.length);
 
             if (resized.length === 0) {
                 lastDescriptorRef.current = null;
@@ -175,8 +218,6 @@ export function useDetection({
                     const leftEAR = calculateEAR(leftEye);
                     const rightEAR = calculateEAR(rightEye);
                     const avgEAR = (leftEAR + rightEAR) / 2.0;
-
-                    // Standard EAR threshold for a blink is around 0.2
                     if (avgEAR < 0.2) {
                         livenessRef.current = true;
                         setHasBlinked(true);
@@ -218,35 +259,60 @@ export function useDetection({
             setFaceCount(0);
         }
 
-        // 4. Draw Hands (Synchronous from ref)
+        // 4. Draw Hands — Soundboard + Virtual Cursor
         if (handModelsReady && handResultsRef.current?.multiHandLandmarks) {
             const results = handResultsRef.current;
             const hands = results.multiHandLandmarks;
             setHandCount(hands.length);
 
             hands.forEach((landmarks: any[], idx: number) => {
-                const gesture = classifyGesture(landmarks);
-                const box = getHandBoundingBox(landmarks, w, h);
                 const handedness = results.multiHandedness?.[idx]?.label || "Hand";
+                const box = getHandBoundingBox(landmarks, w, h);
 
-                setTopGesture(gesture);
-                drawLabeledBox(ctx, box, gesture, COLORS.hand, `${handedness} hand`);
-                drawHandSkeleton(ctx, landmarks, w, h);
+                // ─── Finger State Detection (Soundboard) ───
+                const fingerStates: FingerStates = getFingerStates(landmarks);
+                const fingerNames: FingerName[] = ["index", "middle", "ring", "pinky"];
+                const activeLabels: string[] = [];
 
-                const now2 = Date.now();
-                if (
-                    gesture !== lastGestureSound.current &&
-                    now2 - lastGestureSoundTime.current > 1500
-                ) {
-                    lastGestureSound.current = gesture;
-                    lastGestureSoundTime.current = now2;
-                    playGestureSound(gesture);
+                for (const finger of fingerNames) {
+                    const state = fingerStates[finger];
+                    const config = FINGER_CONFIG[finger];
+                    const wasDown = prevFingerDownRef.current[finger];
+
+                    if (state.isDown) {
+                        activeLabels.push(config.label);
+
+                        // Edge detection: trigger sound only on the frame finger goes DOWN
+                        if (!wasDown) {
+                            playSample(finger);
+                        }
+
+                        // Draw glowing floating text above the fingertip
+                        const tipPx = state.tipX * w;
+                        const tipPy = state.tipY * h;
+                        drawFingerLabel(ctx, tipPx, tipPy, config.label, config.color);
+                    }
                 }
 
-                checkGestureAction(gesture);
+                // Update previous state for next frame's edge detection
+                prevFingerDownRef.current = {
+                    index: fingerStates.index.isDown,
+                    middle: fingerStates.middle.isDown,
+                    ring: fingerStates.ring.isDown,
+                    pinky: fingerStates.pinky.isDown,
+                };
 
-                // ─── Virtual Cursor & Pinch Click ───
-                // Only process cursor for the first hand detected
+                // Update gesture display with active soundboard labels
+                const gestureText = activeLabels.length > 0
+                    ? activeLabels.join(" · ")
+                    : "LISTENING...";
+                setTopGesture(gestureText);
+
+                // Draw hand bounding box and skeleton
+                drawLabeledBox(ctx, box, gestureText, COLORS.hand, `${handedness} hand`);
+                drawHandSkeleton(ctx, landmarks, w, h);
+
+                // ─── Virtual Cursor & Pinch Click (preserved) ───
                 if (idx === 0) {
                     const indexTip = landmarks[8];
                     const thumbTip = landmarks[4];
@@ -268,7 +334,6 @@ export function useDetection({
                     
                     if (pinchDist < 30) {
                         setIsPinching(true);
-                        // Draw pinch indicator
                         ctx.beginPath();
                         ctx.arc(pX, pY, 15, 0, 2 * Math.PI);
                         ctx.strokeStyle = "#ff00ff";
@@ -277,23 +342,15 @@ export function useDetection({
 
                         if (now - pinchCooldownRef.current > 1000) {
                             pinchCooldownRef.current = now;
-                            
-                            // Map canvas coordinates to screen for synthetic click
                             const canvasRect = canvas.getBoundingClientRect();
-                            // Because video is horizontally flipped in CSS via scaleX(-1), 
-                            // we must invert the X coordinate relative to the canvas width.
                             const flippedX = w - pX; 
                             const scaleX = canvasRect.width / w;
                             const scaleY = canvasRect.height / h;
-                            
                             const screenX = canvasRect.left + (flippedX * scaleX);
                             const screenY = canvasRect.top + (pY * scaleY);
-                            
-                            // Trigger synthetic DOM click
                             const element = document.elementFromPoint(screenX, screenY);
                             if (element && element instanceof HTMLElement) {
                                 element.click();
-                                playGestureSound("PINCH_CLICK"); // Optional audio feedback
                             }
                         }
                     } else {
@@ -305,6 +362,13 @@ export function useDetection({
             setHandCount(0);
             setCursorPos(null);
             setIsPinching(false);
+            // Reset finger states when no hand detected
+            prevFingerDownRef.current = {
+                index: false,
+                middle: false,
+                ring: false,
+                pinky: false,
+            };
         }
 
         // 5. Draw Objects

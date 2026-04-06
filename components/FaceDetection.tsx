@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { registerGestureAction } from "@/utils/gestureActions";
+
 import { toggleSounds } from "@/utils/sounds";
 import { cn } from "@/utils/cn";
 import Dashboard from "./Dashboard";
@@ -97,12 +97,7 @@ export default function FaceDetection() {
 
     const isRegistrationReady = lastDescriptorRef.current !== null && registerName.trim().length > 0 && hasBlinked;
 
-    // Register global gesture actions manually
-    useEffect(() => {
-        registerGestureAction("THUMBS UP 👍", () => {
-            window.dispatchEvent(new CustomEvent("gesture-capture"));
-        });
-    }, []);
+
 
     const handleRegisterFace = () => {
         if (!registerName.trim()) {

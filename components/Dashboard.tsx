@@ -48,8 +48,8 @@ export default function Dashboard({
                     <p className="text-white font-mono text-sm truncate font-bold tracking-wide">{topExpression || "UNKNOWN"}</p>
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex flex-col justify-center">
-                    <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest font-bold mb-1">Top Gesture</p>
-                    <p className="text-white font-mono text-sm truncate font-bold tracking-wide">{topGesture || "NONE WAIT"}</p>
+                    <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest font-bold mb-1">Soundboard</p>
+                    <p className="text-white font-mono text-sm truncate font-bold tracking-wide">{topGesture || "LISTENING..."}</p>
                 </div>
             </div>
 
