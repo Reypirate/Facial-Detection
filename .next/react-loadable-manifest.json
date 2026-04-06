@@ -2,7 +2,7 @@
   "app/page.tsx -> @/components/FaceDetection": {
     "id": "app/page.tsx -> @/components/FaceDetection",
     "files": [
-      "static/chunks/_baaa5d._.js",
+      "static/chunks/_10edc0._.js",
       "static/chunks/78c17_next_dist_compiled_react_120a43._.js",
       "static/chunks/78c17_next_dist_compiled_react-dom_cjs_react-dom_development_1e5b0b.js",
       "static/chunks/78c17_next_dist_compiled_react-dom_index_eecd3d.js",
@@ -11,7 +11,7 @@
       "static/chunks/78c17_next_script_f4fc5a.js",
       "static/chunks/059db_tailwind-merge_dist_bundle-mjs_mjs_fb77d5._.js",
       "static/chunks/node_modules__pnpm_5a70e7._.js",
-      "static/chunks/components_FaceDetection_tsx_e60380._.js"
+      "static/chunks/components_FaceDetection_tsx_0dfeee._.js"
     ]
   }
 }

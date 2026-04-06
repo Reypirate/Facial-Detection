@@ -1,15 +1,97 @@
-// ─── Whisper Board Audio Engine ─────────────────────────────────────────
+import { WordName } from "@/types/models";
 
-import { WordName, WORD_CONFIG } from "@/types/models";
+const WORD_AUDIO_PATHS: Record<WordName, string[]> = {
+    I: ["/sounds/I.mp3", "/sounds/i.mp3"],
+    love: ["/sounds/love.mp3", "/sounds/Love.mp3"],
+    you: ["/sounds/you.mp3", "/sounds/You.mp3"],
+    hate: ["/sounds/hate.mp3", "/sounds/Hate.mp3"],
+    that: ["/sounds/that.mp3", "/sounds/That.mp3"],
+};
+
+const EXPECTED_WORD_COUNT = 5;
 
 let audioCtx: AudioContext | null = null;
 let soundEnabled = true;
-const sampleBuffers: Partial<Record<WordName, AudioBuffer>> = {};
 let initialized = false;
+let initPromise: Promise<void> | null = null;
 
-function getAudioCtx(): AudioContext {
-    if (!audioCtx) audioCtx = new AudioContext();
+const decodedBuffers: Partial<Record<WordName, AudioBuffer>> = {};
+
+function getAudioContext(): AudioContext | null {
+    if (typeof window === "undefined") return null;
+
+    if (!audioCtx) {
+        const extendedWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
+        const AudioContextCtor = window.AudioContext || extendedWindow.webkitAudioContext;
+
+        if (!AudioContextCtor) {
+            console.warn("[WhisperBoard] Web Audio API is not supported in this browser.");
+            return null;
+        }
+
+        audioCtx = new AudioContextCtor();
+    }
+
     return audioCtx;
+}
+
+function normalizeWord(word: string): WordName | null {
+    const cleaned = word.trim().toLowerCase();
+    if (cleaned === "i") return "I";
+    if (cleaned === "love") return "love";
+    if (cleaned === "you") return "you";
+    if (cleaned === "hate") return "hate";
+    if (cleaned === "that") return "that";
+    return null;
+}
+
+async function decodeWordBuffer(ctx: AudioContext, word: WordName): Promise<void> {
+    const candidates = WORD_AUDIO_PATHS[word];
+    let lastError: unknown = null;
+
+    for (const audioPath of candidates) {
+        try {
+            const response = await fetch(audioPath, { cache: "no-store" });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const compressedData = await response.arrayBuffer();
+            const decoded = await ctx.decodeAudioData(compressedData);
+            decodedBuffers[word] = decoded;
+            return;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    console.warn(
+        `[WhisperBoard] Failed to load/decode audio for "${word}". Tried: ${candidates.join(", ")}.`,
+        lastError
+    );
+}
+
+async function tryResumeContext(ctx: AudioContext): Promise<boolean> {
+    if (ctx.state === "running") return true;
+
+    try {
+        await ctx.resume();
+    } catch (error) {
+        console.warn(
+            "[WhisperBoard] AudioContext resume was blocked. Trigger init/resume from a user click/tap.",
+            error
+        );
+        return false;
+    }
+
+    if (ctx.state !== "running") {
+        console.warn(
+            "[WhisperBoard] AudioContext is not running yet. A user gesture may be required before playback."
+        );
+        return false;
+    }
+
+    return true;
 }
 
 export function toggleSounds(on: boolean) {
@@ -20,118 +102,80 @@ export function isSoundEnabled() {
     return soundEnabled;
 }
 
-// ─── Fallback tone generation ───────────────────────────────────────────
-const FALLBACK_FREQ: Record<WordName, number> = {
-    "I": 523,
-    "love": 659,
-    "you": 784,
-    "hate": 349,
-    "that": 440,
-};
-
-function generateFallbackBuffer(ctx: AudioContext, word: WordName): AudioBuffer {
-    const sampleRate = ctx.sampleRate;
-    const duration = 0.4;
-    const length = Math.floor(sampleRate * duration);
-    const buffer = ctx.createBuffer(1, length, sampleRate);
-    const data = buffer.getChannelData(0);
-    const freq = FALLBACK_FREQ[word];
-
-    for (let i = 0; i < length; i++) {
-        const t = i / sampleRate;
-        const envelope = Math.exp(-t * 6);
-        data[i] = Math.sin(2 * Math.PI * freq * t) * envelope * 0.3;
-    }
-    return buffer;
-}
-
-// ─── Initialize: load all 5 audio samples ───────────────────────────────
 export async function initSoundboard(): Promise<void> {
     if (initialized) return;
-    initialized = true;
+    if (initPromise) return initPromise;
 
-    const ctx = getAudioCtx();
-    const words: WordName[] = ["I", "love", "you", "hate", "that"];
-
-    await Promise.all(
-        words.map(async (word) => {
-            const config = WORD_CONFIG[word];
-            try {
-                const response = await fetch(config.audioFile);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const arrayBuffer = await response.arrayBuffer();
-                sampleBuffers[word] = await ctx.decodeAudioData(arrayBuffer);
-                console.log(`[WhisperBoard] Loaded ${config.audioFile}`);
-            } catch (err) {
-                console.warn(
-                    `[WhisperBoard] Failed to load ${config.audioFile}, using fallback tone`,
-                    err
-                );
-                sampleBuffers[word] = generateFallbackBuffer(ctx, word);
-            }
-        })
-    );
-
-    console.log("[WhisperBoard] All audio samples ready");
-}
-
-// ─── Play a word sample ─────────────────────────────────────────────────
-export function playWord(word: WordName): void {
-    if (!soundEnabled) return;
-
-    const ctx = getAudioCtx();
-    if (ctx.state === "suspended") ctx.resume();
-
-    const buffer = sampleBuffers[word];
-    if (!buffer) {
-        console.warn(`[WhisperBoard] No buffer for "${word}"`);
+    const ctx = getAudioContext();
+    if (!ctx) {
+        console.warn("[WhisperBoard] Unable to initialize audio context.");
         return;
     }
 
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
+    initPromise = (async () => {
+        const words = Object.keys(WORD_AUDIO_PATHS) as WordName[];
+        await Promise.all(words.map((word) => decodeWordBuffer(ctx, word)));
 
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.45, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + buffer.duration);
+        initialized = true;
 
-    source.connect(gain);
-    gain.connect(ctx.destination);
-    source.start();
+        const loadedCount = words.filter((word) => Boolean(decodedBuffers[word])).length;
+        if (loadedCount < EXPECTED_WORD_COUNT) {
+            console.warn(
+                `[WhisperBoard] Loaded ${loadedCount}/${EXPECTED_WORD_COUNT} audio buffers. Missing files will be silent.`
+            );
+        } else {
+            console.log("[WhisperBoard] All custom MP3 buffers are decoded and ready.");
+        }
+
+        if (ctx.state !== "running") {
+            console.warn(
+                "[WhisperBoard] Audio decoded, but context is suspended. Call init/resume from a user interaction to unlock playback."
+            );
+        }
+    })().finally(() => {
+        initPromise = null;
+    });
+
+    return initPromise;
 }
 
-// ─── Utility sounds (kept for registration, etc.) ───────────────────────
+export async function resumeSoundboard(): Promise<void> {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    await tryResumeContext(ctx);
+}
 
-export function playShutter() {
+export function playWord(word: string): void {
     if (!soundEnabled) return;
-    const ctx = getAudioCtx();
-    const bufferSize = Math.floor(ctx.sampleRate * 0.08);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+
+    const normalized = normalizeWord(word);
+    if (!normalized) {
+        console.warn(`[WhisperBoard] Unknown word "${word}". Expected one of: I, love, you, hate, that.`);
+        return;
     }
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    const gain = ctx.createGain();
-    gain.gain.value = 0.25;
-    source.connect(gain);
-    gain.connect(ctx.destination);
-    source.start();
-}
 
-export function playCountdownBeep(final: boolean = false) {
-    if (!soundEnabled) return;
-    const ctx = getAudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = final ? 880 : 600;
-    const dur = final ? 0.3 : 0.12;
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + dur);
+    if (!initialized && !initPromise) {
+        void initSoundboard();
+    }
+
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const buffer = decodedBuffers[normalized];
+    if (!buffer) {
+        console.warn(
+            `[WhisperBoard] Buffer for "${normalized}" is not ready yet. Ensure initSoundboard() has finished.`
+        );
+        return;
+    }
+
+    void (async () => {
+        const canPlay = await tryResumeContext(ctx);
+        if (!canPlay) return;
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+    })();
 }

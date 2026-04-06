@@ -20,9 +20,9 @@ export interface SavedFace {
     descriptor: Float32Array;
 }
 
-// ─── Whisper Board Types ────────────────────────────────────────────────
+// Whisper Board Types
 
-export type FingerName = "index" | "middle" | "ring" | "pinky";
+export type FingerName = "thumb" | "index" | "middle" | "ring";
 export type WordName = "I" | "love" | "you" | "hate" | "that";
 
 export interface FingerState {
@@ -32,6 +32,7 @@ export interface FingerState {
 }
 
 export interface SoundboardGestures {
+    thumb: FingerState;
     index: FingerState;
     middle: FingerState;
     ring: FingerState;
@@ -58,10 +59,10 @@ export const WORD_CONFIG: Record<WordName, WordConfig> = {
     "that": { word: "that", color: "rgba(160, 145, 175, 0.8)", audioFile: "/sounds/That.mp3" },
 };
 
-/** Maps finger → word for the soundboard */
+/** Maps finger -> word for the soundboard */
 export const FINGER_TO_WORD: Record<FingerName, WordName> = {
+    thumb: "hate",
     index: "I",
     middle: "love",
     ring: "you",
-    pinky: "hate",
 };

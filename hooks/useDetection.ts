@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { SavedFace, HandResult, FingerName, WordName, WORD_CONFIG, FINGER_TO_WORD } from "../types/models";
+import { SavedFace, HandResult, FingerName, WORD_CONFIG, FINGER_TO_WORD } from "../types/models";
 import { getSoundboardGestures } from "@/utils/gestureClassifier";
 import { drawLabeledBox, drawHandSkeleton, getHandBoundingBox, COLORS } from "@/utils/drawingHelpers";
 import { playWord, initSoundboard } from "@/utils/sounds";
 
-// ─── Face Matching helper ───────────────────────────────────────────────
+// Face Matching helper
 function matchFace(descriptor: Float32Array, saved: SavedFace[]): string | null {
     if (saved.length === 0) return null;
     let bestMatch: string | null = null;
@@ -23,7 +23,7 @@ function matchFace(descriptor: Float32Array, saved: SavedFace[]): string | null 
     return bestMatch;
 }
 
-// ─── Draw whisper word at a position ────────────────────────────────────
+// Draw whisper word at a position
 // `active` = true when the finger is currently bent / pinching
 function drawWhisperWord(
     ctx: CanvasRenderingContext2D,
@@ -34,6 +34,7 @@ function drawWhisperWord(
     active: boolean
 ) {
     const textY = y - 28;
+    const boostVisibility = word === "I" || word === "love" || word === "you";
 
     ctx.save();
 
@@ -64,12 +65,14 @@ function drawWhisperWord(
         ctx.textBaseline = "middle";
         ctx.shadowColor = "rgba(255, 255, 255, 0.6)";
         ctx.shadowBlur = 4;
-        ctx.fillStyle = "rgba(60, 60, 75, 0.45)";
+        ctx.fillStyle = boostVisibility
+            ? "rgba(60, 60, 75, 0.68)"
+            : "rgba(60, 60, 75, 0.45)";
         ctx.fillText(word, x, textY);
 
         // Faint dot at fingertip
         ctx.shadowBlur = 0;
-        ctx.globalAlpha = 0.2;
+        ctx.globalAlpha = boostVisibility ? 0.32 : 0.2;
         ctx.beginPath();
         ctx.arc(x, y, 8, 0, 2 * Math.PI);
         ctx.strokeStyle = "rgba(60, 60, 75, 0.4)";
@@ -79,6 +82,20 @@ function drawWhisperWord(
 
     ctx.restore();
 }
+
+type FingerGestureSnapshot = {
+    thumb: boolean;
+    index: boolean;
+    middle: boolean;
+    ring: boolean;
+};
+
+const EMPTY_FINGER_SNAPSHOT: FingerGestureSnapshot = {
+    thumb: false,
+    index: false,
+    middle: false,
+    ring: false,
+};
 
 interface DetectionProps {
     videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -126,20 +143,9 @@ export function useDetection({
     const lastFpsTime = useRef(Date.now());
     const requestRef = useRef<number | null>(null);
 
-    // ─── Whisper Board: previous state for edge-triggered audio ──────────
-    const prevGestureRef = useRef<{
-        index: boolean;
-        middle: boolean;
-        ring: boolean;
-        pinky: boolean;
-        pinch: boolean;
-    }>({
-        index: false,
-        middle: false,
-        ring: false,
-        pinky: false,
-        pinch: false,
-    });
+    // Whisper Board: previous state for edge-triggered audio
+    const prevRightFingersRef = useRef<FingerGestureSnapshot>({ ...EMPTY_FINGER_SNAPSHOT });
+    const prevLeftPinchRef = useRef(false);
 
     // Store activeTab in a ref so the rAF loop always reads the latest value
     const activeTabRef = useRef(activeTab);
@@ -269,64 +275,76 @@ export function useDetection({
             const hands = results.multiHandLandmarks;
             setHandCount(hands.length);
 
+            let sawRightHand = false;
+            let sawLeftHand = false;
+            const frameActiveWords: string[] = [];
+
             hands.forEach((landmarks: any[], idx: number) => {
                 const handedness = results.multiHandedness?.[idx]?.label || "Hand";
+                const normalizedHandedness = handedness.toLowerCase();
+                const isLeftHand = normalizedHandedness === "left";
+                const isRightHand = normalizedHandedness === "right" || normalizedHandedness === "hand";
                 const box = getHandBoundingBox(landmarks, w, h);
 
-                // ─── Whisper Board mode ───
+                // Whisper Board mode
                 if (currentTab === "soundboard") {
                     const gestures = getSoundboardGestures(landmarks);
-                    const fingerNames: FingerName[] = ["index", "middle", "ring", "pinky"];
+                    const fingerNames: FingerName[] = ["thumb", "index", "middle", "ring"];
                     const activeWords: string[] = [];
 
-                    // Draw ALL finger words every frame, trigger audio only on edge
-                    for (const finger of fingerNames) {
-                        const state = gestures[finger];
-                        const word = FINGER_TO_WORD[finger];
-                        const config = WORD_CONFIG[word];
-                        const wasDown = prevGestureRef.current[finger];
+                    if (isRightHand) {
+                        sawRightHand = true;
 
-                        const tipPx = state.tipX * w;
-                        const tipPy = state.tipY * h;
+                        for (const finger of fingerNames) {
+                            const state = gestures[finger];
+                            const word = FINGER_TO_WORD[finger];
+                            const config = WORD_CONFIG[word];
+                            const wasDown = prevRightFingersRef.current[finger];
 
-                        if (state.isDown) {
-                            activeWords.push(word);
-                            // Edge-triggered audio: only on transition up→down
-                            if (!wasDown) {
-                                playWord(word);
+                            const tipPx = state.tipX * w;
+                            const tipPy = state.tipY * h;
+
+                            if (state.isDown) {
+                                activeWords.push(word);
+                                frameActiveWords.push(word);
+                                // Edge-triggered audio: only on transition up->down
+                                if (!wasDown) {
+                                    playWord(word);
+                                }
+                            }
+
+                            // Always draw the word. active=true gives visual emphasis.
+                            drawWhisperWord(ctx, tipPx, tipPy, word, config.color, state.isDown);
+                        }
+
+                        prevRightFingersRef.current = {
+                            thumb: gestures.thumb.isDown,
+                            index: gestures.index.isDown,
+                            middle: gestures.middle.isDown,
+                            ring: gestures.ring.isDown,
+                        };
+                    }
+
+                    if (isLeftHand) {
+                        sawLeftHand = true;
+
+                        const wasPinching = prevLeftPinchRef.current;
+                        const midPx = gestures.pinch.midX * w;
+                        const midPy = gestures.pinch.midY * h;
+
+                        if (gestures.pinch.isPinching) {
+                            activeWords.push("that");
+                            frameActiveWords.push("that");
+                            if (!wasPinching) {
+                                playWord("that");
                             }
                         }
 
-                        // ALWAYS draw the word — active=true gives visual emphasis
-                        drawWhisperWord(ctx, tipPx, tipPy, word, config.color, state.isDown);
+                        drawWhisperWord(ctx, midPx, midPy, "that", WORD_CONFIG["that"].color, gestures.pinch.isPinching);
+                        prevLeftPinchRef.current = gestures.pinch.isPinching;
                     }
 
-                    // Pinch → "that" — always draw at thumb/index midpoint
-                    const wasPinching = prevGestureRef.current.pinch;
-                    const midPx = gestures.pinch.midX * w;
-                    const midPy = gestures.pinch.midY * h;
-
-                    if (gestures.pinch.isPinching) {
-                        activeWords.push("that");
-                        if (!wasPinching) {
-                            playWord("that");
-                        }
-                    }
-                    drawWhisperWord(ctx, midPx, midPy, "that", WORD_CONFIG["that"].color, gestures.pinch.isPinching);
-
-                    // Update previous state
-                    prevGestureRef.current = {
-                        index: gestures.index.isDown,
-                        middle: gestures.middle.isDown,
-                        ring: gestures.ring.isDown,
-                        pinky: gestures.pinky.isDown,
-                        pinch: gestures.pinch.isPinching,
-                    };
-
-                    const gestureText = activeWords.length > 0
-                        ? activeWords.join(" ")
-                        : "";
-                    setTopGesture(gestureText);
+                    const gestureText = activeWords.length > 0 ? activeWords.join(" ") : "";
 
                     drawLabeledBox(ctx, box, gestureText || "ready", COLORS.hand, `${handedness}`);
                 } else {
@@ -335,7 +353,7 @@ export function useDetection({
 
                 drawHandSkeleton(ctx, landmarks, w, h);
 
-                // ─── Virtual Cursor (always active on first hand) ───
+                // Virtual Cursor (always active on first hand)
                 if (idx === 0) {
                     const indexTip = landmarks[8];
                     const thumbTip = landmarks[4];
@@ -377,17 +395,23 @@ export function useDetection({
                     }
                 }
             });
+
+            if (currentTab === "soundboard") {
+                setTopGesture(frameActiveWords.join(" "));
+                if (!sawRightHand) {
+                    prevRightFingersRef.current = { ...EMPTY_FINGER_SNAPSHOT };
+                }
+                if (!sawLeftHand) {
+                    prevLeftPinchRef.current = false;
+                }
+            }
         } else {
             setHandCount(0);
             setCursorPos(null);
             setIsPinching(false);
-            prevGestureRef.current = {
-                index: false,
-                middle: false,
-                ring: false,
-                pinky: false,
-                pinch: false,
-            };
+            prevRightFingersRef.current = { ...EMPTY_FINGER_SNAPSHOT };
+            prevLeftPinchRef.current = false;
+            setTopGesture("");
         }
 
         // 5. Draw Objects
