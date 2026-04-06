@@ -20,9 +20,10 @@ export interface SavedFace {
     descriptor: Float32Array;
 }
 
-// ─── Soundboard Finger Tracking Types ───────────────────────────────────
+// ─── Whisper Board Types ────────────────────────────────────────────────
 
 export type FingerName = "index" | "middle" | "ring" | "pinky";
+export type WordName = "I" | "love" | "you" | "hate" | "that";
 
 export interface FingerState {
     isDown: boolean;
@@ -30,17 +31,37 @@ export interface FingerState {
     tipY: number;
 }
 
-export type FingerStates = Record<FingerName, FingerState>;
+export interface SoundboardGestures {
+    index: FingerState;
+    middle: FingerState;
+    ring: FingerState;
+    pinky: FingerState;
+    pinch: {
+        isPinching: boolean;
+        midX: number;
+        midY: number;
+    };
+}
 
-export interface FingerConfig {
-    label: string;
+export interface WordConfig {
+    word: WordName;
     color: string;
     audioFile: string;
 }
 
-export const FINGER_CONFIG: Record<FingerName, FingerConfig> = {
-    index:  { label: "I",    color: "#ff007f", audioFile: "/sounds/I.mp3" },
-    middle: { label: "Love", color: "#39ff14", audioFile: "/sounds/Love.mp3" },
-    ring:   { label: "U",    color: "#007fff", audioFile: "/sounds/You.mp3" },
-    pinky:  { label: "Hate", color: "#ff073a", audioFile: "/sounds/Hate.mp3" },
+/** Soft pastel colors for the Limbo theme */
+export const WORD_CONFIG: Record<WordName, WordConfig> = {
+    "I":    { word: "I",    color: "rgba(90, 80, 75, 0.75)",   audioFile: "/sounds/I.mp3" },
+    "love": { word: "love", color: "rgba(185, 140, 148, 0.8)", audioFile: "/sounds/Love.mp3" },
+    "you":  { word: "you",  color: "rgba(130, 160, 180, 0.8)", audioFile: "/sounds/You.mp3" },
+    "hate": { word: "hate", color: "rgba(180, 120, 100, 0.8)", audioFile: "/sounds/Hate.mp3" },
+    "that": { word: "that", color: "rgba(160, 145, 175, 0.8)", audioFile: "/sounds/That.mp3" },
+};
+
+/** Maps finger → word for the soundboard */
+export const FINGER_TO_WORD: Record<FingerName, WordName> = {
+    index: "I",
+    middle: "love",
+    ring: "you",
+    pinky: "hate",
 };

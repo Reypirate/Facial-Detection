@@ -31,14 +31,16 @@ export function drawLabeledBox(
     color: string,
     sublabel?: string
 ) {
-    // Bounding box
+    // Soft bounding box
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
     ctx.strokeRect(box.x, box.y, box.width, box.height);
+    ctx.setLineDash([]);
 
-    // Corner accents
-    const cornerLen = 18;
-    ctx.lineWidth = 4;
+    // Rounded corner accents
+    const cornerLen = 14;
+    ctx.lineWidth = 2.5;
     ctx.strokeStyle = color;
 
     ctx.beginPath();
@@ -65,21 +67,29 @@ export function drawLabeledBox(
     ctx.lineTo(box.x + box.width, box.y + box.height - cornerLen);
     ctx.stroke();
 
-    // Label background
-    ctx.font = "bold 14px monospace";
+    // Label pill
+    ctx.font = "500 13px 'Inter', sans-serif";
     const textWidth = ctx.measureText(label).width;
-    ctx.fillStyle = color;
-    ctx.fillRect(box.x, box.y - 26, textWidth + 14, 24);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    const pillX = box.x;
+    const pillY = box.y - 24;
+    const pillW = textWidth + 16;
+    const pillH = 22;
+    ctx.beginPath();
+    ctx.roundRect(pillX, pillY, pillW, pillH, 6);
+    ctx.fill();
 
     // Label text
-    ctx.fillStyle = "#000000";
-    ctx.fillText(label, box.x + 7, box.y - 8);
+    ctx.fillStyle = "#3a3430";
+    ctx.fillText(label, pillX + 8, pillY + 15);
 
     // Sublabel
     if (sublabel) {
-        ctx.font = "bold 12px monospace";
-        ctx.fillStyle = color + "cc";
-        ctx.fillText(sublabel, box.x + 4, box.y + box.height + 16);
+        ctx.font = "400 11px 'Inter', sans-serif";
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.8;
+        ctx.fillText(sublabel, box.x + 4, box.y + box.height + 15);
+        ctx.globalAlpha = 1;
     }
 }
 
@@ -89,11 +99,11 @@ export function drawHandSkeleton(
     w: number,
     h: number
 ) {
-    // Landmark dots
-    ctx.fillStyle = "rgba(0, 187, 255, 0.6)";
+    // Soft landmark dots
+    ctx.fillStyle = "rgba(168, 152, 136, 0.5)";
     landmarks.forEach((lm: any) => {
         ctx.beginPath();
-        ctx.arc(lm.x * w, lm.y * h, 3, 0, 2 * Math.PI);
+        ctx.arc(lm.x * w, lm.y * h, 2.5, 0, 2 * Math.PI);
         ctx.fill();
     });
 
@@ -106,7 +116,7 @@ export function drawHandSkeleton(
         [13, 17], [17, 18], [18, 19], [19, 20],
         [0, 17],
     ];
-    ctx.strokeStyle = "rgba(0, 187, 255, 0.3)";
+    ctx.strokeStyle = "rgba(168, 152, 136, 0.25)";
     ctx.lineWidth = 1;
     connections.forEach(([a, b]) => {
         ctx.beginPath();
@@ -116,10 +126,10 @@ export function drawHandSkeleton(
     });
 }
 
-// Colors for each detection type
+// Soft colors for detection labels
 export const COLORS = {
-    face: "#00ff88",
-    hand: "#00bbff",
-    object: "#ff9f43",
-    pose: "#ff6b9d",
+    face: "#B5C4B1",    // Sage green
+    hand: "#A8C4D9",    // Soft sky blue
+    object: "#E8C4A8",  // Warm peach
+    pose: "#C4B5D4",    // Lavender
 };

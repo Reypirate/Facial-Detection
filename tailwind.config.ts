@@ -9,26 +9,26 @@ const config: Config = {
     theme: {
         extend: {
             colors: {
-                forest: {
-                    900: '#091612',
-                    800: '#11231B',
-                    700: '#1A3328',
+                cream: {
+                    50: '#FEFDFB',
+                    100: '#FDF8F0',
+                    200: '#F9EDDB',
                 },
-                mana: {
-                    400: '#34D399',
-                    500: '#10B981',
-                    600: '#059669',
+                warm: {
+                    300: '#E8DDD3',
+                    400: '#C9BDB0',
+                    500: '#A89888',
                 },
-                elven: {
-                    300: '#F3F4F6',
-                    400: '#E2E8F0',
-                    500: '#94A3B8',
-                }
+                soft: {
+                    rose: '#E8B4B8',
+                    sage: '#B5C4B1',
+                    sky: '#A8C4D9',
+                    lavender: '#C4B5D4',
+                    peach: '#E8C4A8',
+                },
             },
             backgroundImage: {
                 "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-                "gradient-conic":
-                    "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
             },
         },
     },

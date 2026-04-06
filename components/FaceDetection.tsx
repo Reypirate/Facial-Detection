@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-
 import { toggleSounds } from "@/utils/sounds";
 import { cn } from "@/utils/cn";
 import Dashboard from "./Dashboard";
@@ -38,10 +37,9 @@ function saveFaceToDB(name: string, descriptor: Float32Array) {
 }
 
 // ─── Tabs ───────────────────────────────────────────────────────────────
-type TabId = "detection" | "register";
+type TabId = "detection" | "register" | "soundboard";
 
 export default function FaceDetection() {
-    // 1. Core Detection Canvas
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     const [activeTab, setActiveTab] = useState<TabId>("detection");
@@ -69,7 +67,6 @@ export default function FaceDetection() {
         setSavedFaces(loadSavedFaces());
     }, []);
 
-    // Registration visual feedback logic
     const {
         faceCount,
         handCount,
@@ -80,8 +77,6 @@ export default function FaceDetection() {
         emotionHistory,
         lastDescriptorRef,
         hasBlinked,
-        cursorPos,
-        isPinching
     } = useDetection({
         videoRef,
         canvasRef,
@@ -92,25 +87,24 @@ export default function FaceDetection() {
         handResultsRef,
         objectModelRef,
         detectionPaused,
-        savedFaces
+        savedFaces,
+        activeTab
     });
 
     const isRegistrationReady = lastDescriptorRef.current !== null && registerName.trim().length > 0 && hasBlinked;
 
-
-
     const handleRegisterFace = () => {
         if (!registerName.trim()) {
-            setRegisterStatus("⚠️ Unknown identity flag. Need alias.");
+            setRegisterStatus("Please enter a name.");
             return;
         }
         if (!lastDescriptorRef.current) {
-            setRegisterStatus("⚠️ Core not synced. Look at the lens.");
+            setRegisterStatus("No face detected. Look at the camera.");
             return;
         }
         saveFaceToDB(registerName.trim(), lastDescriptorRef.current);
         setSavedFaces(loadSavedFaces());
-        setRegisterStatus(`✅ Identity Enrolled: [${registerName}]`);
+        setRegisterStatus(`✓ Registered: ${registerName}`);
         setRegisterName("");
         setTimeout(() => setRegisterStatus(""), 3000);
     };
@@ -133,41 +127,44 @@ export default function FaceDetection() {
 
     const areAllModelsLoading = cameraReady && (!faceModelsReady || !handModelsReady || !objectModelReady);
     
-    // Dynamic border for recording tab
-    let videoBorderClass = "border-mana-500/20";
+    // Soft border states
+    let videoBorderClass = "border-warm-300/40";
     if (activeTab === "register") {
         videoBorderClass = isRegistrationReady 
-            ? "border-mana-500 shadow-[0_0_30px_rgba(16,185,129,0.3)]" 
-            : "border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.2)]";
+            ? "border-emerald-300 shadow-sm" 
+            : "border-rose-200 shadow-sm";
+    } else if (activeTab === "soundboard") {
+        videoBorderClass = "border-soft-lavender/60 shadow-sm";
     }
 
-    const TABS: { id: TabId; label: string; emoji: string }[] = [
-        { id: "detection", label: "Detection Matrix", emoji: "🔍" },
-        { id: "register", label: "Registry Hub", emoji: "🏷️" },
+    const TABS: { id: TabId; label: string; icon: string }[] = [
+        { id: "detection", label: "Detection", icon: "👁" },
+        { id: "register", label: "Register", icon: "✎" },
+        { id: "soundboard", label: "Whisper Board", icon: "♪" },
     ];
 
     if (cameraError) {
         return (
             <div className={cn(
                 "flex flex-col items-center justify-center w-full max-w-[800px] aspect-[4/3]",
-                "bg-forest-800/80 backdrop-blur-xl rounded-2xl border border-red-500/30 text-center",
-                "p-6 shadow-[0_0_50px_rgba(239,68,68,0.1)]"
+                "bg-white rounded-2xl border border-warm-300/50 text-center",
+                "p-8 shadow-sm"
             )}>
-                <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
-                    <p className="text-4xl animate-bounce">📷</p>
+                <div className="w-16 h-16 bg-cream-100 rounded-full flex items-center justify-center mb-5">
+                    <p className="text-3xl">📷</p>
                 </div>
-                <h2 className="text-red-400 font-bold mb-3 font-mono text-xl tracking-tight">Lens Access Revoked</h2>
-                <p className="text-elven-400 text-sm mb-8 max-w-sm leading-relaxed">
-                    The Arcane Core requires visual feed access to process models. Grant permission to restore connection.
+                <h2 className="text-slate-700 font-medium mb-2 text-lg">Camera Access Needed</h2>
+                <p className="text-warm-400 text-sm mb-6 max-w-sm leading-relaxed">
+                    Please allow camera access so we can detect faces and hands.
                 </p>
                 <button
                     onClick={retryCamera}
                     className={cn(
-                        "px-8 py-3 bg-red-500/10 text-red-400 border border-red-500/50 rounded-xl",
-                        "hover:bg-red-500/20 transition-all font-mono text-sm uppercase tracking-widest font-bold"
+                        "px-6 py-2.5 bg-slate-700 text-white rounded-xl",
+                        "hover:bg-slate-600 transition-all text-sm font-medium shadow-sm"
                     )}
                 >
-                    Recalibrate Lens
+                    Try Again
                 </button>
             </div>
         );
@@ -177,33 +174,33 @@ export default function FaceDetection() {
     const renderStatusIndicator = () => {
         if (!cameraReady) {
             return (
-                <div className="flex items-center gap-3">
-                    <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500"></span>
+                <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
                     </span>
-                    <span className="text-yellow-400 font-mono text-xs font-bold tracking-wider">SYNCING LENS</span>
+                    <span className="text-warm-500 text-[10px] font-medium tracking-wider">Connecting...</span>
                 </div>
             );
         }
         if (areAllModelsLoading) {
             return (
-                <div className="flex items-center gap-3">
-                    <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500"></span>
+                <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
                     </span>
-                    <span className="text-yellow-400 font-mono text-xs font-bold tracking-wider">CHARGING RUNES</span>
+                    <span className="text-warm-500 text-[10px] font-medium tracking-wider">Loading models...</span>
                 </div>
             );
         }
         return (
-            <div className="flex items-center gap-3">
-                <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mana-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-mana-500"></span>
+            <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
                 </span>
-                <span className="text-mana-400 font-mono text-xs font-bold tracking-wider">MATRIX ACTIVE</span>
+                <span className="text-warm-500 text-[10px] font-medium tracking-wider">Ready</span>
             </div>
         );
     };
@@ -223,7 +220,7 @@ export default function FaceDetection() {
             {/* Main Stage */}
             <div className={cn(
                 "relative w-full max-w-[800px] aspect-[4/3] rounded-2xl overflow-hidden",
-                "border shadow-2xl transition-all duration-500 bg-forest-900",
+                "border shadow-sm transition-all duration-500 bg-cream-50",
                 videoBorderClass
             )}>
                 
@@ -233,112 +230,159 @@ export default function FaceDetection() {
                     autoPlay
                     muted
                     playsInline
-                    className="absolute inset-0 w-full h-full object-cover opacity-90"
-                    style={{ transform: "scaleX(-1)", filter: "contrast(1.05) brightness(0.9)" }}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    style={{ transform: "scaleX(-1)", filter: "brightness(1.02) contrast(1.02)" }}
                 />
 
-                {/* Layer 2: Detection Bounding Boxes and Logic */}
+                {/* Detection Canvas Overlay */}
                 <canvas
                     ref={canvasRef}
-                    className="absolute inset-0 w-full h-full object-cover pointer-events-none drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]"
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                     style={{ transform: "scaleX(-1)" }}
                 />
 
-                {/* Top Nav (Hovering) */}
-                <div className="absolute top-4 inset-x-4 z-30 flex justify-between items-start pointer-events-none">
+                {/* Top Nav */}
+                <div className="absolute top-3 inset-x-3 z-30 flex justify-between items-start pointer-events-none">
                     {/* Tab Bar */}
-                    <div className="pointer-events-auto bg-forest-900/60 backdrop-blur-md border border-mana-500/20 rounded-xl p-1 flex gap-1 shadow-lg">
+                    <div className="pointer-events-auto bg-white/80 backdrop-blur-md border border-warm-300/30 rounded-xl p-1 flex gap-0.5 shadow-sm">
                         {TABS.map((tab) => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={cn(
-                                    "px-4 py-2 rounded-lg text-[11px] font-mono transition-all font-bold tracking-widest",
+                                    "px-3 py-1.5 rounded-lg text-[11px] transition-all font-medium tracking-wide",
                                     activeTab === tab.id
-                                        ? "bg-mana-500/20 text-mana-400 shadow-[inset_0_0_15px_rgba(16,185,129,0.3)] border border-mana-500/30"
-                                        : "text-elven-500 hover:text-elven-300 border border-transparent"
+                                        ? "bg-slate-700 text-white shadow-sm"
+                                        : "text-warm-500 hover:text-slate-600 hover:bg-cream-100"
                                 )}
                             >
-                                {tab.emoji} <span className="hidden sm:inline-block ml-1">{tab.label}</span>
+                                {tab.icon} <span className="hidden sm:inline-block ml-0.5">{tab.label}</span>
                             </button>
                         ))}
                     </div>
 
                     {/* Status Pill */}
-                    <div className="pointer-events-auto bg-forest-900/60 backdrop-blur-md border border-mana-500/20 rounded-full px-4 py-2.5 shadow-lg">
+                    <div className="pointer-events-auto bg-white/80 backdrop-blur-md border border-warm-300/30 rounded-full px-3 py-1.5 shadow-sm">
                         {renderStatusIndicator()}
                     </div>
                 </div>
 
                 {/* Center Loading State */}
                 {areAllModelsLoading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-forest-900/60 backdrop-blur-sm pointer-events-none">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-white/60 backdrop-blur-sm pointer-events-none">
                         <div className={cn(
-                            "w-16 h-16 border-4 border-mana-500/20 border-t-mana-500",
-                            "rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+                            "w-12 h-12 border-2 border-warm-300/30 border-t-warm-500",
+                            "rounded-full animate-spin mb-4"
                         )} />
+                        <p className="text-warm-400 text-xs font-medium tracking-wider">Loading models...</p>
                     </div>
                 )}
-
-                {/* Scan line effect */}
-                <div className="absolute inset-0 pointer-events-none mix-blend-overlay">
-                    <div className="w-full h-[2px] bg-gradient-to-r from-transparent via-mana-500/50 to-transparent animate-pulse" />
-                </div>
                 
                 {/* Paused Overlay */}
                 {detectionPaused && (
-                    <div className="absolute inset-0 bg-forest-900/40 backdrop-blur-sm flex items-center justify-center z-20 pointer-events-none">
-                        <span className="text-4xl font-bold font-mono text-mana-400 tracking-widest drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]">FREEZE FRAME</span>
+                    <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-20 pointer-events-none">
+                        <span className="text-2xl font-medium text-slate-600 tracking-wide">Paused</span>
                     </div>
                 )}
             </div>
 
+            {/* Panel Below Video */}
             <div className="w-full max-w-[800px] mt-4 flex flex-col items-center justify-end z-30">
                 <div className={cn(
-                    "w-full overflow-y-auto no-scrollbar rounded-2xl bg-forest-800/80",
-                    "backdrop-blur-xl border border-mana-500/20 shadow-lg transition-all p-5"
+                    "w-full overflow-y-auto no-scrollbar rounded-2xl bg-cream-50",
+                    "border border-warm-300/30 shadow-sm transition-all p-5"
                 )}>
                     
                     {activeTab === "detection" && (
-                            <Dashboard
-                                faceCount={faceCount}
-                                handCount={handCount}
-                                objectCount={objectCount}
-                                fps={fps}
-                                topExpression={topExpression}
-                                topGesture={topGesture}
-                                emotionHistory={emotionHistory}
-                                soundEnabled={soundEnabled}
-                                onToggleSound={handleToggleSound}
-                                detectionPaused={detectionPaused}
-                            />
-                        )}
+                        <Dashboard
+                            faceCount={faceCount}
+                            handCount={handCount}
+                            objectCount={objectCount}
+                            fps={fps}
+                            topExpression={topExpression}
+                            topGesture={topGesture}
+                            emotionHistory={emotionHistory}
+                            soundEnabled={soundEnabled}
+                            onToggleSound={handleToggleSound}
+                            detectionPaused={detectionPaused}
+                        />
+                    )}
 
-                        {activeTab === "register" && (
-                            <RegisterTab
-                                registerName={registerName}
-                                setRegisterName={setRegisterName}
-                                registerStatus={registerStatus}
-                                savedFaces={savedFaces}
-                                hasBlinked={hasBlinked}
-                                isRegistrationReady={isRegistrationReady}
-                                onRegister={handleRegisterFace}
-                                onDeleteFace={handleDeleteFace}
-                            />
-                        )}
-                    </div>
+                    {activeTab === "register" && (
+                        <RegisterTab
+                            registerName={registerName}
+                            setRegisterName={setRegisterName}
+                            registerStatus={registerStatus}
+                            savedFaces={savedFaces}
+                            hasBlinked={hasBlinked}
+                            isRegistrationReady={isRegistrationReady}
+                            onRegister={handleRegisterFace}
+                            onDeleteFace={handleDeleteFace}
+                        />
+                    )}
+
+                    {activeTab === "soundboard" && (
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-warm-500 text-[10px] font-medium uppercase mb-1 tracking-widest">Whisper Board</p>
+                                <p className="text-warm-400 text-xs leading-relaxed">
+                                    Curl your fingers to trigger words. Pinch your thumb and index finger together for &ldquo;that&rdquo;.
+                                </p>
+                            </div>
+                            
+                            <div className="grid grid-cols-5 gap-2">
+                                {[
+                                    { word: "I", finger: "Index", color: "bg-warm-300/40" },
+                                    { word: "love", finger: "Middle", color: "bg-soft-rose/30" },
+                                    { word: "you", finger: "Ring", color: "bg-soft-sky/30" },
+                                    { word: "hate", finger: "Pinky", color: "bg-soft-peach/30" },
+                                    { word: "that", finger: "Pinch", color: "bg-soft-lavender/30" },
+                                ].map(({ word, finger, color }) => (
+                                    <div key={word} className={cn(
+                                        "rounded-xl p-3 text-center border border-warm-300/20 transition-all",
+                                        color
+                                    )}>
+                                        <p className="text-slate-700 text-lg font-medium">{word}</p>
+                                        <p className="text-warm-400 text-[9px] uppercase tracking-widest mt-1">{finger}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="bg-white border border-warm-300/30 rounded-xl px-4 py-3">
+                                <p className="text-warm-400 text-[10px] font-medium uppercase mb-2 tracking-widest">Current Output</p>
+                                <p className="text-slate-700 text-base font-medium min-h-[1.5em]">
+                                    {topGesture || <span className="text-warm-300 italic">listening...</span>}
+                                </p>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleToggleSound}
+                                    className={cn(
+                                        "px-4 py-2 rounded-xl border text-[10px] tracking-widest uppercase font-medium transition-all",
+                                        soundEnabled
+                                            ? "border-soft-sage text-emerald-700 bg-emerald-50/50"
+                                            : "border-warm-300/50 text-warm-400 bg-white hover:bg-cream-100"
+                                    )}
+                                >
+                                    {soundEnabled ? "🔊 Sound On" : "🔇 Sound Off"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
+            </div>
 
-            {/* Legend Below the controls */}
-            <div className="mt-4 flex gap-6 px-5 py-3 bg-forest-800/60 backdrop-blur-md rounded-full border border-mana-500/20 text-[10px] font-mono tracking-widest uppercase font-bold text-elven-500 shadow-md">
-                <span className="flex items-center gap-2 transition-colors hover:text-mana-400">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-mana-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" /> Face Matrix
+            {/* Legend */}
+            <div className="mt-4 flex gap-5 px-5 py-2.5 bg-white/80 backdrop-blur-sm rounded-full border border-warm-300/20 text-[9px] tracking-widest uppercase font-medium text-warm-400 shadow-sm">
+                <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "#B5C4B1" }} /> Faces
                 </span>
-                <span className="flex items-center gap-2 transition-colors hover:text-cyan-400">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-[#00bbff] shadow-[0_0_10px_rgba(0,187,255,0.5)]" /> Gesture Matrix
+                <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "#A8C4D9" }} /> Hands
                 </span>
-                <span className="flex items-center gap-2 transition-colors hover:text-orange-400">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-[#ff9f43] shadow-[0_0_10px_rgba(255,159,67,0.5)]" /> Object Matrix
+                <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "#E8C4A8" }} /> Objects
                 </span>
             </div>
         </div>

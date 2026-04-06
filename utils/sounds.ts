@@ -1,10 +1,10 @@
-// ─── Soundboard Audio Engine ────────────────────────────────────────────
+// ─── Whisper Board Audio Engine ─────────────────────────────────────────
 
-import { FingerName, FINGER_CONFIG } from "@/types/models";
+import { WordName, WORD_CONFIG } from "@/types/models";
 
 let audioCtx: AudioContext | null = null;
 let soundEnabled = true;
-const sampleBuffers: Partial<Record<FingerName, AudioBuffer>> = {};
+const sampleBuffers: Partial<Record<WordName, AudioBuffer>> = {};
 let initialized = false;
 
 function getAudioCtx(): AudioContext {
@@ -20,73 +20,71 @@ export function isSoundEnabled() {
     return soundEnabled;
 }
 
-// ─── Generate a fallback tone buffer for a finger ───────────────────────
-// Each finger gets a distinct frequency so they sound different
-const FALLBACK_FREQ: Record<FingerName, number> = {
-    index: 523,   // C5
-    middle: 659,  // E5
-    ring: 784,    // G5
-    pinky: 440,   // A4
+// ─── Fallback tone generation ───────────────────────────────────────────
+const FALLBACK_FREQ: Record<WordName, number> = {
+    "I": 523,
+    "love": 659,
+    "you": 784,
+    "hate": 349,
+    "that": 440,
 };
 
-function generateFallbackBuffer(ctx: AudioContext, finger: FingerName): AudioBuffer {
+function generateFallbackBuffer(ctx: AudioContext, word: WordName): AudioBuffer {
     const sampleRate = ctx.sampleRate;
     const duration = 0.4;
     const length = Math.floor(sampleRate * duration);
     const buffer = ctx.createBuffer(1, length, sampleRate);
     const data = buffer.getChannelData(0);
-    const freq = FALLBACK_FREQ[finger];
+    const freq = FALLBACK_FREQ[word];
 
     for (let i = 0; i < length; i++) {
         const t = i / sampleRate;
-        // Sine wave with exponential decay envelope
         const envelope = Math.exp(-t * 6);
-        data[i] = Math.sin(2 * Math.PI * freq * t) * envelope * 0.4;
+        data[i] = Math.sin(2 * Math.PI * freq * t) * envelope * 0.3;
     }
     return buffer;
 }
 
-// ─── Initialize the soundboard: load MP3s with fallback ─────────────────
+// ─── Initialize: load all 5 audio samples ───────────────────────────────
 export async function initSoundboard(): Promise<void> {
     if (initialized) return;
     initialized = true;
 
     const ctx = getAudioCtx();
-    const fingers: FingerName[] = ["index", "middle", "ring", "pinky"];
+    const words: WordName[] = ["I", "love", "you", "hate", "that"];
 
     await Promise.all(
-        fingers.map(async (finger) => {
-            const config = FINGER_CONFIG[finger];
+        words.map(async (word) => {
+            const config = WORD_CONFIG[word];
             try {
                 const response = await fetch(config.audioFile);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const arrayBuffer = await response.arrayBuffer();
-                sampleBuffers[finger] = await ctx.decodeAudioData(arrayBuffer);
-                console.log(`[Soundboard] Loaded ${config.audioFile}`);
+                sampleBuffers[word] = await ctx.decodeAudioData(arrayBuffer);
+                console.log(`[WhisperBoard] Loaded ${config.audioFile}`);
             } catch (err) {
                 console.warn(
-                    `[Soundboard] Failed to load ${config.audioFile}, using fallback tone`,
+                    `[WhisperBoard] Failed to load ${config.audioFile}, using fallback tone`,
                     err
                 );
-                sampleBuffers[finger] = generateFallbackBuffer(ctx, finger);
+                sampleBuffers[word] = generateFallbackBuffer(ctx, word);
             }
         })
     );
 
-    console.log("[Soundboard] Initialization complete");
+    console.log("[WhisperBoard] All audio samples ready");
 }
 
-// ─── Play a sample for a specific finger ────────────────────────────────
-export function playSample(finger: FingerName): void {
+// ─── Play a word sample ─────────────────────────────────────────────────
+export function playWord(word: WordName): void {
     if (!soundEnabled) return;
 
     const ctx = getAudioCtx();
-    // Resume context if suspended (browser autoplay policy)
     if (ctx.state === "suspended") ctx.resume();
 
-    const buffer = sampleBuffers[finger];
+    const buffer = sampleBuffers[word];
     if (!buffer) {
-        console.warn(`[Soundboard] No buffer loaded for ${finger}`);
+        console.warn(`[WhisperBoard] No buffer for "${word}"`);
         return;
     }
 
@@ -94,7 +92,7 @@ export function playSample(finger: FingerName): void {
     source.buffer = buffer;
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.setValueAtTime(0.45, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + buffer.duration);
 
     source.connect(gain);
@@ -102,7 +100,7 @@ export function playSample(finger: FingerName): void {
     source.start();
 }
 
-// ─── Kept for other features (face registration, etc.) ──────────────────
+// ─── Utility sounds (kept for registration, etc.) ───────────────────────
 
 export function playShutter() {
     if (!soundEnabled) return;
@@ -116,7 +114,7 @@ export function playShutter() {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     const gain = ctx.createGain();
-    gain.gain.value = 0.3;
+    gain.gain.value = 0.25;
     source.connect(gain);
     gain.connect(ctx.destination);
     source.start();
@@ -130,7 +128,7 @@ export function playCountdownBeep(final: boolean = false) {
     osc.type = "sine";
     osc.frequency.value = final ? 880 : 600;
     const dur = final ? 0.3 : 0.12;
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     osc.connect(gain);
     gain.connect(ctx.destination);

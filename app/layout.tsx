@@ -6,8 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-    title: "Facial Recognition App",
-    description: "Real-time facial recognition using face-api.js",
+    title: "Limbo — WhisperWeave",
+    description: "Gentle AI-powered facial and gesture recognition with a whisper-soft interface.",
 };
 
 export default function RootLayout({

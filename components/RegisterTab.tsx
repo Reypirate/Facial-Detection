@@ -26,25 +26,31 @@ export default function RegisterTab({
     return (
         <div className="space-y-4">
             <div>
-                <p className="text-elven-500 text-[10px] font-mono uppercase mb-1 tracking-widest font-bold">
-                    Arcane Identity Enrollment
+                <p className="text-warm-500 text-[10px] font-medium uppercase mb-1 tracking-widest">
+                    Face Registration
                 </p>
-                <p className="text-elven-400 text-xs mb-4 leading-relaxed tracking-wider">
-                    Align face with the central lens. The matrix pulses <span className="text-mana-400 font-bold drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]">emerald</span> when lock is secured. Enter an alias to bind local recognition runes.
+                <p className="text-warm-400 text-xs mb-4 leading-relaxed">
+                    Look directly at the camera. The border turns{" "}
+                    <span className="text-emerald-600 font-medium">green</span>{" "}
+                    when your face is detected. Enter a name to register.
                 </p>
 
                 {/* Liveness Indicator */}
-                <div className={`mb-4 border rounded-xl p-3 flex items-center justify-between transition-all ${hasBlinked
-                        ? "bg-mana-500/10 border-mana-500/30 shadow-[inset_0_0_20px_rgba(16,185,129,0.1)]"
-                        : "bg-orange-500/10 border-orange-500/30 shadow-[inset_0_0_20px_rgba(249,115,22,0.1)]"
-                    }`}>
+                <div className={cn(
+                    "mb-4 border rounded-xl p-3 flex items-center justify-between transition-all",
+                    hasBlinked
+                        ? "bg-emerald-50 border-emerald-200"
+                        : "bg-amber-50 border-amber-200"
+                )}>
                     <div className="flex flex-col">
-                        <span className="text-xs font-mono font-bold tracking-widest uppercase text-elven-300">
-                            Vitality Verification
+                        <span className="text-xs font-medium tracking-wide text-slate-600">
+                            Liveness Check
                         </span>
-                        <span className={`text-[10px] font-mono tracking-widest uppercase mt-0.5 ${hasBlinked ? "text-mana-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "text-orange-400 animate-pulse drop-shadow-[0_0_5px_rgba(249,115,22,0.5)]"
-                            }`}>
-                            {hasBlinked ? "✧ REAL LIFEFORM MET" : "⚠️ AWAITING BLINK CALIBRATION..."}
+                        <span className={cn(
+                            "text-[10px] tracking-wide mt-0.5",
+                            hasBlinked ? "text-emerald-600" : "text-amber-600 animate-pulse"
+                        )}>
+                            {hasBlinked ? "✓ Verified — blink detected" : "Waiting for blink..."}
                         </span>
                     </div>
                 </div>
@@ -54,53 +60,53 @@ export default function RegisterTab({
                         type="text"
                         value={registerName}
                         onChange={(e) => setRegisterName(e.target.value)}
-                        placeholder="Enter binding alias..."
+                        placeholder="Enter name..."
                         className={cn(
-                            "flex-1 bg-forest-900/80 border border-mana-500/20 rounded-xl px-4 py-2.5",
-                            "text-mana-400 font-mono text-sm outline-none transition-all shadow-inner",
-                            "focus:outline-none focus:border-mana-500/50 focus:bg-forest-900",
-                            "placeholder:text-elven-500/50"
+                            "flex-1 bg-white border border-warm-300/50 rounded-xl px-4 py-2.5",
+                            "text-slate-700 text-sm outline-none transition-all",
+                            "focus:outline-none focus:border-warm-400 focus:ring-1 focus:ring-warm-300/30",
+                            "placeholder:text-warm-300"
                         )}
                     />
                     <button
                         onClick={onRegister}
                         disabled={!isRegistrationReady}
                         className={cn(
-                            "px-6 py-2.5 font-bold font-mono rounded-xl text-sm transition-all tracking-wide",
+                            "px-6 py-2.5 font-medium rounded-xl text-sm transition-all tracking-wide",
                             isRegistrationReady
-                                ? "bg-mana-500 text-forest-900 shadow-[0_0_20px_rgba(16,185,129,0.5)] hover:bg-mana-400"
-                                : "bg-forest-800 text-elven-500 cursor-not-allowed border border-white/5"
+                                ? "bg-slate-700 text-white hover:bg-slate-600 shadow-sm"
+                                : "bg-cream-200 text-warm-400 cursor-not-allowed"
                         )}
                     >
-                        BIND
+                        Register
                     </button>
                 </div>
                 {registerStatus && (
-                    <p className="mt-3 text-xs font-mono text-mana-400 flex items-center gap-2 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)] animate-pulse">
+                    <p className="mt-3 text-xs text-emerald-600 font-medium animate-pulse">
                         {registerStatus}
                     </p>
                 )}
             </div>
 
             {savedFaces.length > 0 && (
-                <div className="pt-4 border-t border-mana-500/20">
-                    <p className="text-elven-500 text-[10px] font-mono uppercase mb-3 tracking-widest font-bold">
-                        Secured Crystal Index ({savedFaces.length})
+                <div className="pt-4 border-t border-warm-300/30">
+                    <p className="text-warm-500 text-[10px] font-medium uppercase mb-3 tracking-widest">
+                        Registered Faces ({savedFaces.length})
                     </p>
                     <div className="grid grid-cols-2 gap-2">
                         {savedFaces.map((f, i) => (
                             <div
                                 key={i}
-                                className="flex items-center justify-between bg-forest-900/50 border border-mana-500/10 hover:border-mana-500/30 rounded-xl px-3 py-2 transition-colors"
+                                className="flex items-center justify-between bg-white border border-warm-300/30 hover:border-warm-300 rounded-xl px-3 py-2 transition-colors"
                             >
-                                <span className="text-elven-300 font-mono text-xs font-bold truncate pr-3 drop-shadow-[0_0_2px_rgba(243,244,246,0.5)]">
+                                <span className="text-slate-700 text-xs font-medium truncate pr-3">
                                     {f.name}
                                 </span>
                                 <button
                                     onClick={() => onDeleteFace(f.name)}
-                                    className="text-red-400/70 hover:text-red-400 text-[10px] uppercase font-mono tracking-widest shrink-0 transition-colors"
+                                    className="text-rose-400 hover:text-rose-500 text-[10px] uppercase tracking-widest shrink-0 transition-colors"
                                 >
-                                    Shatter
+                                    Remove
                                 </button>
                             </div>
                         ))}
