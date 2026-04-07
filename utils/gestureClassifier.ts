@@ -4,7 +4,7 @@ import { SoundboardGestures } from "@/types/models";
 
 const PINCH_THRESHOLD = 0.05;
 const FINGER_BEND_TOLERANCE = 0.03;
-const THUMB_BEND_TOLERANCE = -0.02;
+const THUMB_BEND_TOLERANCE = 0.01;
 
 function isBent(tipY: number, jointY: number, tolerance: number): boolean {
     return tipY > jointY - tolerance;
